@@ -6,3 +6,5 @@ flask-cors
 gunicorn
 pywin32>=301; platform_system=="Windows"
 python_version>=3.7,<3.11
+
+
