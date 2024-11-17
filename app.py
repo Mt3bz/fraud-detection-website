@@ -10,7 +10,8 @@ from werkzeug.exceptions import HTTPException
 app = Flask(__name__)
 
 # Setup rate limiter
-limiter = Limiter(get_remote_address, app=app, default_limits=["200 per day", "50 per hour"])
+limiter = Limiter(get_remote_address, default_limits=["200 per day", "50 per hour"])
+limiter.init_app(app)
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
