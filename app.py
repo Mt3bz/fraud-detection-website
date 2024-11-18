@@ -19,7 +19,7 @@ limiter.init_app(app)  # Initialize the limiter with the app here
 logging.info("Loading the model...")
 
 try:
-    model, feature_names = joblib.load("model_with_features.pkl")
+    model, feature_names = joblib.load("xgboost_model_with_features.pkl")
     logging.info("Model loaded successfully!")
 except Exception as e:
     logging.error("Failed to load the model: %s", str(e))
