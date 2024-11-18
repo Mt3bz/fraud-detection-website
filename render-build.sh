@@ -1,6 +1,6 @@
 #!/bin/bash
-pip install --upgrade pip setuptools wheel
-pip install -r requirements.txt
-pip install --upgrade numpy
+
+pip install --upgrade pip
+pip install --force-reinstall -r requirements.txt
 
 chmod +x render-build.sh
