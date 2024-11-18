@@ -17,7 +17,6 @@ limiter.init_app(app)  # Initialize the limiter with the app here
 
 # Load model and feature names
 logging.info("Loading the model...")
-logging.info("Preprocessed data for model: %s", aligned_data)
 
 try:
     model, feature_names = joblib.load("model_with_features.pkl")
