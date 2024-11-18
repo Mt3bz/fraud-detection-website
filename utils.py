@@ -9,7 +9,6 @@ def preprocess_data(data, feature_names):
     """
     try:
         input_data = pd.DataFrame([data])
-        # Ensure all feature columns are present
         input_data = input_data.reindex(columns=feature_names, fill_value=0)
         return input_data
     except Exception as e:
@@ -23,18 +22,15 @@ def validate_input(data, feature_names):
     - Ensures correct data types.
     """
     errors = []
-
-    # Check for missing features
     for feature in feature_names:
         if feature not in data:
             errors.append(f"Missing feature: {feature}")
 
-    # Optional: Add data type validation (example for numeric fields)
     for feature, value in data.items():
         if feature in feature_names:
             if isinstance(value, (int, float)) or value is None:
-                continue  # Numeric type is valid
-            elif feature == "type" and not isinstance(value, int):  # Example for encoded 'type' field
+                continue
+            elif feature == "type" and not isinstance(value, int):
                 errors.append(f"Feature '{feature}' must be an integer")
             else:
                 errors.append(f"Invalid data type for feature '{feature}': {type(value).__name__}")
