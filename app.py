@@ -28,7 +28,7 @@ limiter.init_app(app)  # Attach the limiter to the app
 # Load model and features
 logging.info("Loading the model...")
 try:
-    model, feature_names = joblib.load("xgboost_model_with_features.pkl")
+    model, feature_names = joblib.load("randomforest_model_with_features.pkl")
     logging.info("Model loaded successfully!")
 except Exception as e:
     logging.error(f"Failed to load the model: {str(e)}")
@@ -63,7 +63,7 @@ def predict():
         # Preprocess and predict
         aligned_data = preprocess_data(data, feature_names)
         probabilities = model.predict_proba(aligned_data)[0]
-        fraud_status = "Fraud" if probabilities[1] >= 0.1 else "Legitimate"  # Adjust threshold here
+        fraud_status = "Fraud" if probabilities[1] >= 0.2 else "Legitimate"  # Adjusted threshold to 0.2
 
         logging.info(f"Prediction completed. Status: {fraud_status}, Confidence: {probabilities[1]:.2f}")
         return jsonify({"fraud_status": fraud_status, "confidence": round(probabilities[1], 2)})
