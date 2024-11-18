@@ -68,7 +68,7 @@ def predict():
         logging.info(f"Prediction probabilities: {probabilities}")
 
         # Fraud detection logic
-        threshold = 0.1  # Fraud detection threshold
+        threshold = 0.2  # Fraud detection threshold
         fraud_status = "Fraud" if probabilities[1] >= threshold else "Legitimate"
 
         return jsonify({
