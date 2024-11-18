@@ -4,75 +4,60 @@ from flask_limiter.util import get_remote_address
 import joblib
 import pandas as pd
 import logging
-import os
-from werkzeug.exceptions import HTTPException
 from utils import preprocess_data, validate_input
+from werkzeug.exceptions import HTTPException
 
+# Initialize the Flask app
 app = Flask(__name__)
 
-# Load environment variables for sensitive data
-API_KEYS = os.getenv("API_KEYS", "admin:12345").split(",")  # Example: "user1:apikey1,user2:apikey2"
-AUTHORIZED_KEYS = {k.split(":")[0]: k.split(":")[1] for k in API_KEYS}
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("app.log"), logging.StreamHandler()],
-)
+# Set up rate limiter
+limiter = Limiter(key_func=get_remote_address)
+limiter.init_app(app)
 
-# Setup rate limiter
-limiter = Limiter(key_func=get_remote_address, default_limits=["200 per day", "50 per hour"])
-limiter.init_app(app)  # Attach the limiter to the app
-
-# Load model and features
+# Load the model and feature names
 logging.info("Loading the model...")
 try:
-    model, feature_names = joblib.load("random_forest_model_with_features2.pkl") 
-    logging.info("Model loaded successfully!") 
+    model, feature_names = joblib.load("random_forest_model_with_features2.pkl")
+    logging.info("Model loaded successfully!")
 except Exception as e:
-    logging.error(f"Failed to load the model: {str(e)}")
+    logging.error(f"Failed to load the model: {e}")
     raise
 
-# Authentication endpoint
-@app.route("/auth", methods=["POST"])
-def auth():
-    data = request.get_json()
-    username = data.get("username")
-    api_key = data.get("api_key")
-
-    if username in AUTHORIZED_KEYS and AUTHORIZED_KEYS[username] == api_key:
-        return jsonify({"message": "Authentication successful"}), 200
-    logging.warning("Unauthorized access attempt")
-    return jsonify({"error": "Invalid credentials"}), 401
-
-# Fraud detection endpoint
+# Preprocess and validate input data
 @app.route("/predict", methods=["POST"])
 @limiter.limit("5 per minute")  # Limit to 5 requests per minute per IP
 def predict():
     try:
+        # Parse JSON input
         data = request.json
         logging.info(f"Received data: {data}")
 
-        # Validate input
-        validation_errors = validate_input(data, feature_names)
-        if validation_errors:
-            logging.error(f"Input validation failed: {validation_errors}")
-            return jsonify({"error": "Invalid input", "details": validation_errors}), 400
+        # Validate input data
+        errors = validate_input(data, feature_names)
+        if errors:
+            return jsonify({"error": "Invalid input", "details": errors}), 400
 
-        # Preprocess and predict
+        # Preprocess input data
         aligned_data = preprocess_data(data, feature_names)
         logging.info(f"Aligned input data for prediction: {aligned_data}")
+
+        # Make prediction
         probabilities = model.predict_proba(aligned_data)[0]
         logging.info(f"Prediction probabilities: {probabilities}")
-        
-        threshold = 0.2
-        fraud_status = "Fraud" if probabilities[1] >= threshold else "Legitimate"
-        logging.info(f"Prediction completed. Status: {fraud_status}, Confidence: {probabilities[1]:.2f}")
 
-        return jsonify({"fraud_status": fraud_status, "confidence": round(probabilities[1], 2)})
+        # Apply threshold
+        threshold = 0.2  # Customize threshold as needed
+        fraud_status = "Fraud" if probabilities[1] >= threshold else "Legitimate"
+
+        return jsonify({
+            "fraud_status": fraud_status,
+            "confidence": round(probabilities[1], 2)
+        })
     except Exception as e:
-        logging.error(f"Error during prediction: {str(e)}")
+        logging.error(f"Error during prediction: {e}")
         return jsonify({"error": "Internal Server Error"}), 500
 
 # Health check endpoint
@@ -93,7 +78,7 @@ def handle_http_exception(e):
 # General error handler
 @app.errorhandler(Exception)
 def handle_exception(e):
-    logging.error(f"Unexpected error: {str(e)}")
+    logging.error(f"Unexpected error: {e}")
     return jsonify({"error": "Internal Server Error"}), 500
 
 if __name__ == "__main__":
