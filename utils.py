@@ -1,26 +1,30 @@
+import joblib
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder
 
-def preprocess_data(features, feature_names):
+# Load the trained model and preprocessor
+model_pipeline = joblib.load("fraud_detection_pipeline.pkl")
+
+def preprocess_data(data):
     """
-    Preprocess input features for prediction.
-    Ensures all required features are present and aligned.
+    Preprocess the incoming data to align with the model's expected input.
     """
-    # Convert input JSON to DataFrame
-    input_data = pd.DataFrame([features])
+    # Ensure input data matches the required format
+    input_data = pd.DataFrame([data])
+    return input_data
 
-    # Add missing columns with default value 0
-    for feature in feature_names:
-        if feature not in input_data.columns:
-            input_data[feature] = 0  # Default value for missing features
-
-    # Drop extra columns not expected by the model
-    input_data = input_data[feature_names]
-
-    # Log the aligned input data for debugging
-    print("Aligned input data for prediction:", input_data)
-
-    # Scale the features
-    scaler = StandardScaler()
-    scaled_features = scaler.fit_transform(input_data)
-    return scaled_features
+def predict_fraud(data):
+    """
+    Predict whether a transaction is fraudulent using the trained model pipeline.
+    """
+    try:
+        # Preprocess data
+        aligned_data = preprocess_data(data)
+        
+        # Predict fraud status and probabilities
+        probabilities = model_pipeline.predict_proba(aligned_data)[0]
+        fraud_status = "Fraud" if probabilities[1] >= 0.1 else "Legitimate"  # Adjust the threshold if needed
+        return {"fraud_status": fraud_status, "confidence": round(probabilities[1], 2)}
+    except Exception as e:
+        raise ValueError(f"Error during prediction: {str(e)}")
