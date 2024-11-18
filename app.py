@@ -11,7 +11,7 @@ from utils import preprocess_data, validate_input
 app = Flask(__name__)
 
 # Load environment variables for sensitive data
-API_KEYS = os.getenv("API_KEYS", "admin:12345").split(",")  # "user1:apikey1,user2:apikey2"
+API_KEYS = os.getenv("API_KEYS", "admin:12345").split(",")  # Example: "user1:apikey1,user2:apikey2"
 AUTHORIZED_KEYS = {k.split(":")[0]: k.split(":")[1] for k in API_KEYS}
 
 # Setup logging
@@ -21,8 +21,9 @@ logging.basicConfig(
     handlers=[logging.FileHandler("app.log"), logging.StreamHandler()],
 )
 
-# Setup rate limiter with in-memory backend
-limiter = Limiter(get_remote_address, app=app, default_limits=["200 per day", "50 per hour"])
+# Setup rate limiter
+limiter = Limiter(key_func=get_remote_address, default_limits=["200 per day", "50 per hour"])
+limiter.init_app(app)  # Attach the limiter to the app
 
 # Load model and features
 logging.info("Loading the model...")
@@ -47,7 +48,7 @@ def auth():
 
 # Fraud detection endpoint
 @app.route("/predict", methods=["POST"])
-@limiter.limit("5 per minute")
+@limiter.limit("5 per minute")  # Limit to 5 requests per minute per IP
 def predict():
     try:
         data = request.json
