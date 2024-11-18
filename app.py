@@ -8,11 +8,12 @@ import logging
 # Initialize Flask app
 app = Flask(__name__)
 
-# Setup rate limiter
-limiter = Limiter(get_remote_address, app=app, default_limits=["200 per day", "50 per hour"])
-
-# Setup logging for business visibility
+# Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Setup rate limiter
+limiter = Limiter(get_remote_address, default_limits=["200 per day", "50 per hour"])
+limiter.init_app(app)  # Initialize limiter separately to avoid 'TypeError'
 
 # Load XGBoost model and feature names
 logging.info("Loading the XGBoost model...")
@@ -23,13 +24,13 @@ except Exception as e:
     logging.error("Failed to load the model: %s", str(e))
     raise
 
-# Threshold for fraud detection (tunable based on business requirements)
-FRAUD_THRESHOLD = 0.2  # Adjust sensitivity as per need
+# Threshold for fraud detection (adjustable)
+FRAUD_THRESHOLD = 0.2
 
-
-# Authentication decorator
+# Authorized API keys
 AUTHORIZED_KEYS = {"business1": "apikey12345", "business2": "apikey67890"}
 
+# API key decorator
 def require_api_key(f):
     def decorated_function(*args, **kwargs):
         api_key = request.headers.get("x-api-key")
