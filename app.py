@@ -2,23 +2,34 @@ from flask import Flask, request, jsonify
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from functools import wraps
+import joblib
+import pandas as pd
 import logging
-from werkzeug.exceptions import HTTPException
-from utils import predict_fraud
 
+# Initialize Flask app
 app = Flask(__name__)
 
-# Rate limiter setup
+# Setup rate limiter
 limiter = Limiter(get_remote_address, app=app, default_limits=["200 per day", "50 per hour"])
 
-# Logging setup
+# Setup logging for business visibility
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# API key authorization
-AUTHORIZED_KEYS = {
-    "user1": "apikey12345",
-    "user2": "apikey67890"
-}
+# Load XGBoost model and feature names
+logging.info("Loading the XGBoost model...")
+try:
+    model, feature_names = joblib.load("xgboost_model_with_features.pkl")
+    logging.info("XGBoost model loaded successfully!")
+except Exception as e:
+    logging.error("Failed to load the model: %s", str(e))
+    raise
+
+# Threshold for fraud detection (tunable based on business requirements)
+FRAUD_THRESHOLD = 0.1  # Lower value increases fraud detection sensitivity
+
+
+# Authentication decorator
+AUTHORIZED_KEYS = {"business1": "apikey12345", "business2": "apikey67890"}
 
 def require_api_key(f):
     @wraps(f)
@@ -29,14 +40,32 @@ def require_api_key(f):
         return f(*args, **kwargs)
     return decorated_function
 
+
+# Preprocess incoming data
+def preprocess_data(data):
+    """
+    Aligns incoming JSON data with model feature names.
+    """
+    input_data = pd.DataFrame([data])
+    input_data = input_data.reindex(columns=feature_names, fill_value=0)
+    return input_data
+
+
 # Health check endpoint
 @app.route("/health", methods=["GET"])
 def health():
+    """
+    Health check endpoint to confirm API status.
+    """
     return jsonify({"status": "API is healthy"}), 200
+
 
 # Authentication endpoint
 @app.route("/auth", methods=["POST"])
 def auth():
+    """
+    API authentication endpoint.
+    """
     data = request.get_json()
     username = data.get("username")
     api_key = data.get("api_key")
@@ -45,34 +74,48 @@ def auth():
         return jsonify({"message": "Authentication successful"}), 200
     return jsonify({"error": "Invalid credentials"}), 401
 
-# Prediction endpoint
+
+# Fraud detection endpoint
 @app.route("/predict", methods=["POST"])
 @require_api_key
-@limiter.limit("5 per minute")
+@limiter.limit("10 per minute")  # Adjust rate limits for production usage
 def predict():
+    """
+    Predicts whether a transaction is fraudulent or legitimate.
+    """
     try:
         data = request.json
         logging.info("Received data: %s", data)
-        result = predict_fraud(data)
-        logging.info("Prediction result: %s", result)
-        return jsonify(result), 200
+
+        # Preprocess input data
+        aligned_data = preprocess_data(data)
+        logging.info("Aligned input data for prediction: %s", aligned_data)
+
+        # Model prediction
+        probabilities = model.predict_proba(aligned_data)[0]
+        logging.info("Prediction probabilities: %s", probabilities)
+
+        # Fraud determination
+        fraud_status = "Fraud" if probabilities[1] >= FRAUD_THRESHOLD else "Legitimate"
+
+        return jsonify({
+            "fraud_status": fraud_status,
+            "confidence": round(probabilities[1], 2)
+        })
     except Exception as e:
         logging.error("Error during prediction: %s", str(e))
         return jsonify({"error": str(e)}), 500
 
-# Error handling
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({"error": "Endpoint not found"}), 404
 
-@app.errorhandler(HTTPException)
-def handle_http_exception(e):
-    return jsonify({"error": e.description}), e.code
-
+# General error handler
 @app.errorhandler(Exception)
 def handle_exception(e):
+    """
+    Handle unexpected errors globally.
+    """
     logging.error("Unexpected error: %s", str(e))
     return jsonify({"error": "Internal Server Error"}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
