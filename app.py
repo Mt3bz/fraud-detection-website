@@ -5,50 +5,53 @@ import joblib
 import pandas as pd
 import logging
 from utils import preprocess_data, validate_input
-from werkzeug.exceptions import HTTPException
 
-# Initialize the Flask app
+# Initialize Flask app
 app = Flask(__name__)
 
-# Set up logging
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Set up rate limiter
-limiter = Limiter(key_func=get_remote_address)
+# Configure rate limiting
+limiter = Limiter(get_remote_address)
 limiter.init_app(app)
 
-# Load the model and feature names
+# Load model
 logging.info("Loading the model...")
 try:
     model, feature_names = joblib.load("random_forest_model_with_features2.pkl")
     logging.info("Model loaded successfully!")
 except Exception as e:
-    logging.error(f"Failed to load the model: {e}")
+    logging.error(f"Failed to load the model: {str(e)}")
     raise
 
-# Preprocess and validate input data
+# Health check endpoint
+@app.route("/health", methods=["GET"])
+def health_check():
+    return jsonify({"status": "API is live!"}), 200
+
+# Fraud detection endpoint
 @app.route("/predict", methods=["POST"])
-@limiter.limit("5 per minute")  # Limit to 5 requests per minute per IP
+@limiter.limit("5 per minute")
 def predict():
     try:
-        # Parse JSON input
         data = request.json
         logging.info(f"Received data: {data}")
-
-        # Validate input data
+        
+        # Validate input
         errors = validate_input(data, feature_names)
         if errors:
             return jsonify({"error": "Invalid input", "details": errors}), 400
-
-        # Preprocess input data
+        
+        # Preprocess input
         aligned_data = preprocess_data(data, feature_names)
         logging.info(f"Aligned input data for prediction: {aligned_data}")
 
         # Make prediction
         probabilities = model.predict_proba(aligned_data)[0]
         logging.info(f"Prediction probabilities: {probabilities}")
-
-        # Apply threshold
+        
+        # Fraud threshold
         threshold = 0.2
         fraud_status = "Fraud" if probabilities[1] >= threshold else "Legitimate"
 
@@ -57,29 +60,13 @@ def predict():
             "confidence": round(probabilities[1], 2)
         })
     except Exception as e:
-        logging.error(f"Error during prediction: {e}")
-        return jsonify({"error": "Internal Server Error"}), 500
+        logging.error(f"Error during prediction: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
-# Health check endpoint
-@app.route("/health", methods=["GET"])
-def health():
-    return jsonify({"status": "API is healthy"}), 200
-
-# Error handler for 404
+# Error handler
 @app.errorhandler(404)
-def not_found(error):
+def not_found(e):
     return jsonify({"error": "Endpoint not found"}), 404
-
-# Error handler for other HTTP exceptions
-@app.errorhandler(HTTPException)
-def handle_http_exception(e):
-    return jsonify({"error": e.description}), e.code
-
-# General error handler
-@app.errorhandler(Exception)
-def handle_exception(e):
-    logging.error(f"Unexpected error: {e}")
-    return jsonify({"error": "Internal Server Error"}), 500
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
