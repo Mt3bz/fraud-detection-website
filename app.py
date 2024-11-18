@@ -62,10 +62,14 @@ def predict():
 
         # Preprocess and predict
         aligned_data = preprocess_data(data, feature_names)
+        logging.info(f"Aligned input data for prediction: {aligned_data}")
         probabilities = model.predict_proba(aligned_data)[0]
-        fraud_status = "Fraud" if probabilities[1] >= 0.2 else "Legitimate"  # Adjusted threshold to 0.2
-
+        logging.info(f"Prediction probabilities: {probabilities}")
+        
+        threshold = 0.2
+        fraud_status = "Fraud" if probabilities[1] >= threshold else "Legitimate"
         logging.info(f"Prediction completed. Status: {fraud_status}, Confidence: {probabilities[1]:.2f}")
+
         return jsonify({"fraud_status": fraud_status, "confidence": round(probabilities[1], 2)})
     except Exception as e:
         logging.error(f"Error during prediction: {str(e)}")
