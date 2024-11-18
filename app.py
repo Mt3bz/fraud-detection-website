@@ -28,7 +28,7 @@ limiter.init_app(app)  # Attach the limiter to the app
 # Load model and features
 logging.info("Loading the model...")
 try:
-    model, feature_names = joblib.load("random_forest_model_with_features.pkl") 
+    model, feature_names = joblib.load("random_forest_model_with_features2.pkl") 
     logging.info("Model loaded successfully!") 
 except Exception as e:
     logging.error(f"Failed to load the model: {str(e)}")
