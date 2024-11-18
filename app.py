@@ -4,31 +4,34 @@ from flask_limiter.util import get_remote_address
 import joblib
 import pandas as pd
 import logging
+import os
 from werkzeug.exceptions import HTTPException
+from utils import preprocess_data, validate_input
 
 app = Flask(__name__)
 
+# Load environment variables for sensitive data
+API_KEYS = os.getenv("API_KEYS", "admin:12345").split(",")  # "user1:apikey1,user2:apikey2"
+AUTHORIZED_KEYS = {k.split(":")[0]: k.split(":")[1] for k in API_KEYS}
+
 # Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.FileHandler("app.log"), logging.StreamHandler()],
+)
 
-# Setup rate limiter
-limiter = Limiter(key_func=get_remote_address)  # Initialize the limiter without `app`
-limiter.init_app(app)  # Attach the limiter to the Flask app
+# Setup rate limiter with in-memory backend
+limiter = Limiter(get_remote_address, app=app, default_limits=["200 per day", "50 per hour"])
 
-# Load model and feature names
+# Load model and features
 logging.info("Loading the model...")
 try:
     model, feature_names = joblib.load("xgboost_model_with_features.pkl")
     logging.info("Model loaded successfully!")
 except Exception as e:
-    logging.error("Failed to load the model: %s", str(e))
+    logging.error(f"Failed to load the model: {str(e)}")
     raise
-
-# Preprocess the input data
-def preprocess_data(data):
-    input_data = pd.DataFrame([data])
-    input_data = input_data.reindex(columns=feature_names, fill_value=0)
-    return input_data
 
 # Authentication endpoint
 @app.route("/auth", methods=["POST"])
@@ -37,35 +40,35 @@ def auth():
     username = data.get("username")
     api_key = data.get("api_key")
 
-    # Dummy authentication for demo
-    if username == "admin" and api_key == "12345":
+    if username in AUTHORIZED_KEYS and AUTHORIZED_KEYS[username] == api_key:
         return jsonify({"message": "Authentication successful"}), 200
+    logging.warning("Unauthorized access attempt")
     return jsonify({"error": "Invalid credentials"}), 401
 
 # Fraud detection endpoint
 @app.route("/predict", methods=["POST"])
-@limiter.limit("5 per minute")  # Limit to 5 requests per minute per IP
+@limiter.limit("5 per minute")
 def predict():
     try:
         data = request.json
-        logging.info("Received data: %s", data)
+        logging.info(f"Received data: {data}")
 
-        aligned_data = preprocess_data(data)
-        logging.info("Aligned input data for prediction: %s", aligned_data)
+        # Validate input
+        validation_errors = validate_input(data, feature_names)
+        if validation_errors:
+            logging.error(f"Input validation failed: {validation_errors}")
+            return jsonify({"error": "Invalid input", "details": validation_errors}), 400
 
+        # Preprocess and predict
+        aligned_data = preprocess_data(data, feature_names)
         probabilities = model.predict_proba(aligned_data)[0]
-        logging.info("Prediction probabilities: %s", probabilities)
+        fraud_status = "Fraud" if probabilities[1] >= 0.1 else "Legitimate"  # Adjust threshold here
 
-        threshold = 0.1  # Fraud detection threshold
-        fraud_status = "Fraud" if probabilities[1] >= threshold else "Legitimate"
-
-        return jsonify({
-            "fraud_status": fraud_status,
-            "confidence": round(probabilities[1], 2)
-        })
+        logging.info(f"Prediction completed. Status: {fraud_status}, Confidence: {probabilities[1]:.2f}")
+        return jsonify({"fraud_status": fraud_status, "confidence": round(probabilities[1], 2)})
     except Exception as e:
-        logging.error("Error during prediction: %s", str(e))
-        return jsonify({"error": str(e)}), 500
+        logging.error(f"Error during prediction: {str(e)}")
+        return jsonify({"error": "Internal Server Error"}), 500
 
 # Health check endpoint
 @app.route("/health", methods=["GET"])
@@ -85,7 +88,7 @@ def handle_http_exception(e):
 # General error handler
 @app.errorhandler(Exception)
 def handle_exception(e):
-    logging.error("Unexpected error: %s", str(e))
+    logging.error(f"Unexpected error: {str(e)}")
     return jsonify({"error": "Internal Server Error"}), 500
 
 if __name__ == "__main__":
