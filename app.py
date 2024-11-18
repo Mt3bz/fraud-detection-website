@@ -52,13 +52,16 @@ def predict():
         data = request.json
         logging.info("Received data: %s", data)
 
-        aligned_data = preprocess_data(data)
+        # Align input data with model features
+        aligned_data = pd.DataFrame([data]).reindex(columns=feature_names, fill_value=0)
         logging.info("Aligned input data for prediction: %s", aligned_data)
 
+        # Make predictions
         probabilities = model.predict_proba(aligned_data)[0]
         logging.info("Prediction probabilities: %s", probabilities)
 
-        threshold = 0.1  # Fraud detection threshold
+        # Determine fraud status
+        threshold = 0.1  # Adjust this threshold if necessary
         fraud_status = "Fraud" if probabilities[1] >= threshold else "Legitimate"
 
         return jsonify({
