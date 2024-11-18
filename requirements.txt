@@ -2,6 +2,6 @@ Flask==2.2.5
 flask-limiter==2.7
 joblib==1.2.0
 pandas==1.5.3
-numpy==1.21.6 --only-binary=:all:
+numpy==1.23.2 --only-binary=:all:
 xgboost==1.6.1
 gunicorn==20.1.0
