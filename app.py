@@ -1,16 +1,18 @@
 import json
 from flask import Flask, request, jsonify
-from joblib import load
+from catboost import CatBoostClassifier
 import pandas as pd
 from utils import preprocess_data, validate_input
 
-# Load the model and feature names
+# Load the CatBoost model and define features
 print("Loading the CatBoost model...")
-model, features = load("catboost_model_with_features.cbm")
+model = CatBoostClassifier()
+model.load_model("catboost_model_with_features.cbm")  # Use the CatBoost method to load the model
+features = ['step', 'type', 'amount', 'oldbalanceOrg', 'newbalanceOrig', 'oldbalanceDest', 'newbalanceDest']
 print("Model and features loaded successfully!")
 
-# Define threshold for fraud detection
-THRESHOLD = 0.2  # Confidence threshold for fraud classification
+# Define a threshold for fraud detection
+THRESHOLD = 0.2
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -41,9 +43,9 @@ def predict():
 
         # Format response
         response = {
-            "confidence": f"{confidence * 100:.2f}%",  # Convert confidence to percentage
+            "confidence": f"{confidence * 100:.2f}%",
             "prediction": prediction,
-            "input_details": input_data,  # Include original input for business transparency
+            "input_details": input_data,
         }
         print(f"Prediction Response: {response}")
 
