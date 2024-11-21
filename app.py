@@ -1,81 +1,49 @@
 from flask import Flask, request, jsonify
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-import pandas as pd
-import joblib
-import logging
-from werkzeug.exceptions import HTTPException
+from utils import preprocess_data, validate_input, load_model
 
+# Initialize the Flask app
 app = Flask(__name__)
 
-# Logging setup
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+# Load the CatBoost model and feature names
+model_path = "catboost_model_with_features.cbm"  # Update to your actual path
+feature_names = ['step', 'type', 'amount', 'oldbalanceOrg', 'newbalanceOrig', 'oldbalanceDest', 'newbalanceDest']
 
-# Flask-Limiter setup
-limiter = Limiter(key_func=get_remote_address, app=app, default_limits=["200 per day", "50 per hour"])
+print("Loading the model...")
+model = load_model(model_path)
+print("Model loaded successfully!")
 
-# Load the trained model
-logging.info("Loading model...")
-try:
-    model, feature_names = joblib.load("random_forest_model_with_features2.cbm")
-    logging.info("Model loaded successfully!")
-except Exception as e:
-    logging.error("Failed to load the model: %s", str(e))
-    raise
-
-# Health check endpoint
-@app.route("/health", methods=["GET"])
-def health():
-    return jsonify({"status": "API is healthy"}), 200
-
-# Authentication endpoint
-@app.route("/auth", methods=["POST"])
-def auth():
-    data = request.get_json()
-    username = data.get("username")
-    api_key = data.get("api_key")
-    if username == "admin" and api_key == "12345":
-        return jsonify({"message": "Authentication successful"}), 200
-    return jsonify({"error": "Invalid credentials"}), 401
-
-# Fraud prediction endpoint
-@app.route("/predict", methods=["POST"])
-@limiter.limit("5 per minute")
+@app.route('/predict', methods=['POST'])
 def predict():
+    """API endpoint for fraud detection."""
     try:
+        # Parse input JSON
         data = request.json
-        logging.info("Received data: %s", data)
+        if not data:
+            return jsonify({"error": "No input data provided"}), 400
 
-        # Preprocess and validate input data
-        input_data = pd.DataFrame([data])
-        input_data = input_data.reindex(columns=feature_names, fill_value=0)
-        logging.info("Input data aligned for prediction: %s", input_data)
+        # Validate input data
+        errors = validate_input(data, feature_names)
+        if errors:
+            return jsonify({"error": "Invalid input", "details": errors}), 400
 
-        # Predict using the model
-        probabilities = model.predict_proba(input_data)[0]
-        logging.info("Prediction probabilities: %s", probabilities)
+        # Preprocess the input data
+        input_data = preprocess_data(data, feature_names)
 
-        # Define threshold
-        threshold = 0.2
-        fraud_status = "Fraud" if probabilities[1] >= threshold else "Legitimate"
-        return jsonify({"fraud_status": fraud_status, "confidence": round(probabilities[1], 2)})
+        # Make predictions
+        prediction = model.predict(input_data)
+        prediction_proba = model.predict_proba(input_data)[:, 1]
+
+        # Format response
+        result = {
+            "prediction": "Fraud" if prediction[0] == 1 else "Legitimate",
+            "confidence": float(prediction_proba[0])
+        }
+        return jsonify(result), 200
+
     except Exception as e:
-        logging.error("Error during prediction: %s", str(e))
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "An error occurred during prediction", "details": str(e)}), 500
 
-# Error handlers
-@app.errorhandler(404)
-def not_found(e):
-    return jsonify({"error": "Endpoint not found"}), 404
-
-@app.errorhandler(HTTPException)
-def handle_http_exception(e):
-    return jsonify({"error": e.description}), e.code
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    logging.error("Unexpected error: %s", str(e))
-    return jsonify({"error": "Internal Server Error"}), 500
-
-if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+@app.route('/health', methods=['GET'])
+def health():
+    """Health check endpoint."""
+    return jsonify({"status": "Healthy"}), 200
