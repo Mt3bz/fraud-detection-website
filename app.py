@@ -6,7 +6,7 @@ from utils import preprocess_data, validate_input
 
 # Load the model and feature names
 print("Loading the CatBoost model...")
-model, features = load("catboost_model_with_features.pkl")
+model, features = load("catboost_model_with_features.cbm")
 print("Model and features loaded successfully!")
 
 # Define threshold for fraud detection
