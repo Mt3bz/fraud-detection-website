@@ -4,6 +4,9 @@ from catboost import CatBoostClassifier
 import pandas as pd
 from utils import preprocess_data, validate_input
 
+from flask_cors import CORS
+CORS(app)
+
 # Load the CatBoost model and define features
 print("Loading the CatBoost model...")
 model = CatBoostClassifier()
