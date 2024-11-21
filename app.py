@@ -1,49 +1,63 @@
+import json
 from flask import Flask, request, jsonify
-from utils import preprocess_data, validate_input, load_model
+from joblib import load
+import pandas as pd
+from utils import preprocess_data, validate_input
 
-# Initialize the Flask app
+# Load the model and feature names
+print("Loading the CatBoost model...")
+model, features = load("catboost_model_with_features.pkl")
+print("Model and features loaded successfully!")
+
+# Define threshold for fraud detection
+THRESHOLD = 0.2  # Confidence threshold for fraud classification
+
+# Initialize Flask app
 app = Flask(__name__)
 
-# Load the CatBoost model and feature names
-model_path = "catboost_model_with_features.cbm"  # Update to your actual path
-feature_names = ['step', 'type', 'amount', 'oldbalanceOrg', 'newbalanceOrig', 'oldbalanceDest', 'newbalanceDest']
-
-print("Loading the model...")
-model = load_model(model_path)
-print("Model loaded successfully!")
-
-@app.route('/predict', methods=['POST'])
+@app.route("/predict", methods=["POST"])
 def predict():
-    """API endpoint for fraud detection."""
     try:
-        # Parse input JSON
-        data = request.json
-        if not data:
-            return jsonify({"error": "No input data provided"}), 400
+        # Parse JSON data from request
+        input_data = request.json
+        if not input_data:
+            return jsonify({"error": "Invalid input. No data provided."}), 400
 
-        # Validate input data
-        errors = validate_input(data, feature_names)
+        # Validate input
+        errors = validate_input(input_data, features)
         if errors:
-            return jsonify({"error": "Invalid input", "details": errors}), 400
+            return jsonify({"error": "Invalid input.", "details": errors}), 400
 
-        # Preprocess the input data
-        input_data = preprocess_data(data, feature_names)
+        # Preprocess input
+        input_df = preprocess_data(input_data, features)
+        print(f"Input Data for Prediction: {input_df}")
 
-        # Make predictions
-        prediction = model.predict(input_data)
-        prediction_proba = model.predict_proba(input_data)[:, 1]
+        # Predict probabilities
+        probabilities = model.predict_proba(input_df)
+        confidence = probabilities[0][1]  # Probability of being fraudulent
+
+        # Generate prediction
+        prediction = "Fraudulent" if confidence >= THRESHOLD else "Legitimate"
 
         # Format response
-        result = {
-            "prediction": "Fraud" if prediction[0] == 1 else "Legitimate",
-            "confidence": float(prediction_proba[0])
+        response = {
+            "confidence": f"{confidence * 100:.2f}%",  # Convert confidence to percentage
+            "prediction": prediction,
+            "input_details": input_data,  # Include original input for business transparency
         }
-        return jsonify(result), 200
+        print(f"Prediction Response: {response}")
+
+        return jsonify(response)
 
     except Exception as e:
-        return jsonify({"error": "An error occurred during prediction", "details": str(e)}), 500
+        print(f"Error during prediction: {str(e)}")
+        return jsonify({"error": "An error occurred during prediction.", "details": str(e)}), 500
 
-@app.route('/health', methods=['GET'])
-def health():
-    """Health check endpoint."""
-    return jsonify({"status": "Healthy"}), 200
+
+@app.route("/", methods=["GET"])
+def health_check():
+    return jsonify({"status": "API is up and running!"})
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
