@@ -17,7 +17,7 @@ limiter = Limiter(key_func=get_remote_address, app=app, default_limits=["200 per
 # Load the trained model
 logging.info("Loading model...")
 try:
-    model, feature_names = joblib.load("random_forest_model_with_features2.pkl")
+    model, feature_names = joblib.load("random_forest_model_with_features2.cbm")
     logging.info("Model loaded successfully!")
 except Exception as e:
     logging.error("Failed to load the model: %s", str(e))
