@@ -1,4 +1,6 @@
 import pandas as pd
+import joblib
+from catboost import CatBoostClassifier
 
 def preprocess_data(data, feature_names):
     """Preprocess input data to match the model's feature structure."""
@@ -13,3 +15,12 @@ def validate_input(data, feature_names):
         if feature not in data:
             errors.append(f"Missing feature: {feature}")
     return errors
+
+def load_model(model_path):
+    """Load the trained CatBoost model."""
+    try:
+        model = CatBoostClassifier()
+        model.load_model(model_path)
+        return model
+    except Exception as e:
+        raise RuntimeError(f"Error loading model: {e}")
